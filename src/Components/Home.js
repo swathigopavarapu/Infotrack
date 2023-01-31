@@ -145,7 +145,7 @@ class Home extends React.Component{
     render(){
     return <>   
       <LoadScript
-        googleMapsApiKey=""
+        googleMapsApiKey="" // add your google maps api key here
       >
     <div style={{height:'80vh',width:'97vw',margin:'1rem'}} >
         <GoogleMap
