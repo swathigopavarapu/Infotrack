@@ -1,36 +1,99 @@
-import React, { useState,useEffect } from "react";
+import React from "react";
 import {
-	Button,Skeleton 
+	Button ,Slider,Grid
 	
 } from "@mui/material";
 import axios from "axios"; 
 import {
-    useJsApiLoader,
+    
     GoogleMap,
     MarkerF,
-    
     DirectionsRenderer,
+    Polygon, LoadScript ,
   } from '@react-google-maps/api'
 
+class Home extends React.Component{
 
-  const center = { lat: 35.44853591918945, lng: 133.12904357910156 }
-const Home = () =>{
+    state = {
+        progress: [{lat: 35.44853591918945, lng: 133.12904357910156, distance: 0}],
+         path : [ ],
+         velocity:100
+      }
 
-    const { isLoaded } = useJsApiLoader({
-        googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY,
-        libraries: ['places'],
-      })
+    initialDate = new Date()
+  
+    getDistance = () => {
+        const differentInTime = (new Date() - this.initialDate) / 1000 // pass to seconds
+        
+        return differentInTime * this.state.velocity 
+      }
+ 
+    
+      componentWillUnmount = () => {
+        window.clearInterval(this.interval)
+      }
 
-    useEffect(()=>{
-        // const ifameData=document.getElementById("iframeId")
-        // const lat=1.305385;
-        // const lon=30.923029;
-        // ifameData.src=`https://maps.google.com/maps?q=${lat},${lon}&hl=es;&output=embed`
-    })
-    const [map, setMap] = useState(/** @type google.maps.Map */ (null))
-    const [directionsResponse, setDirectionsResponse] = useState(null)
-
-    async function calculateRoute(origin,destination) {
+      moveObject = () => {
+        const distance = this.getDistance()
+        if (! distance) {
+          return
+        }
+    
+        let progress = this.state.path.filter(coordinates => coordinates.distance < distance)
+    
+        const nextLine = this.state.path.find(coordinates => coordinates.distance > distance)
+        if (! nextLine) {
+          this.setState({ progress })
+          return 
+        }
+        const lastLine = progress[progress.length - 1]
+    
+        const lastLineLatLng = new window.google.maps.LatLng(
+          lastLine.lat,
+          lastLine.lng
+        )
+    
+        const nextLineLatLng = new window.google.maps.LatLng(
+          nextLine.lat,
+          nextLine.lng
+        )
+    
+        const totalDistance = nextLine.distance - lastLine.distance
+        const percentage = (distance - lastLine.distance) / totalDistance
+    
+        const position = window.google.maps.geometry.spherical.interpolate(
+          lastLineLatLng,
+          nextLineLatLng,
+          percentage
+        )
+    
+        progress = progress.concat(position)
+        this.setState({ progress })
+      }
+      getCoordinates = () => {
+        let path = this.state.path?.map((coordinates, i, array) => {
+          if (i === 0) {
+             return { ...coordinates, distance: 0 } 
+          }
+          const { lat: lat1, lng: lng1 } = coordinates
+          const latLong1 = new window.google.maps.LatLng(lat1, lng1)
+    
+          const { lat: lat2, lng: lng2 } = array[0]
+          const latLong2 = new window.google.maps.LatLng(lat2, lng2)
+    
+          const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
+            latLong1,
+            latLong2
+          )
+    
+          return { ...coordinates, distance }
+        })
+        this.setState({path:path})
+    
+       
+      }
+ 
+     calculateRoute =async (origin,destination) => {
         // eslint-disable-next-line no-undef
         const directionsService = new google.maps.DirectionsService()
         const results = await directionsService.route({
@@ -39,18 +102,21 @@ const Home = () =>{
           // eslint-disable-next-line no-undef
           travelMode: google.maps.TravelMode.DRIVING,
         })
-        setDirectionsResponse(results)
-        console.log('disatance',  results.routes[0].legs[0].distance,
-        results.routes[0].legs[0].duration)
+
+        
+        this.setState({directionsResponse:results})
+        
+      }
+      handleAnimateVehical = () =>{
+        this.interval = window.setInterval(this.moveObject, 1000);
+        this.getCoordinates()
       }
 
-
-    const handleAnimateVehical = ()=>{
+      handleVehicalRoute = ()=>{
         let accessToken = localStorage.getItem('USER-ACCESS-TOKEN')
         const headers ={
             "Authorization" : `Bearer ${accessToken}`
-        }
-       
+        }       
         let payload ={
             VehicleId: 49,
              VehicleNo: "6", 
@@ -58,48 +124,84 @@ const Home = () =>{
               EndDate: "2023-01-29 23:59:59"
         }
         axios.post('https://uyenotest.infotracktelematics.com:5001/fms/v2/vehicle/history',payload,{headers}).then(res=>{
-            console.log('the response is',res.data.data.historyData )
+            let paths= res.data.data.historyData.map(item=> {return {lat:item.lat,lng:item.lon}})
+      
+            this.setState({path:paths},()=>{  })
             let historyData = res.data.data.historyData
-            let origin=historyData[0].location;
-            let destination = historyData[historyData.length - 1].location
-            calculateRoute(origin,destination)
+            let origin={lat:parseFloat(historyData[0].lat),lng:parseFloat(historyData[0].lon)}
+              //hardcoded because for testing perpose (if i use total histroy the origin and destination are 5m away)
+            let destination = {lat:parseFloat(historyData[1800].lat),lng:parseFloat(historyData[1800].lon)};           
+            
+            this.calculateRoute(origin,destination)
         })
 
     }
 
-    if (!isLoaded) {
-        return <Skeleton />
-      }
+    handleOnChange =(e)=>{
+       this.setState({velocity:e.target.value})
+    }
+ 
     
-    return <>
-    {/* <h2>Map</h2>
-    <Button variant="contained" size='large' onClick={handleAnimateVehical}>Animate Vehical</Button> */}
-    <div style={{height:'90vh',width:'97vw',margin:'1rem'}} >
-        {/* Google Map Box */}
-        
-        
+    render(){
+    return <>   
+      <LoadScript
+        googleMapsApiKey=""
+      >
+    <div style={{height:'80vh',width:'97vw',margin:'1rem'}} >
         <GoogleMap
-          center={center}
-          zoom={2}
+          center={{lat: 
+            35.44853591918945, lng: 
+            133.12904357910156 }}
+            
+         zoom={10}
           mapContainerStyle={{ width: '100%', height: '100%' }}
           options={{
             zoomControl: true,
             streetViewControl: false,
             mapTypeControl: false,
             fullscreenControl: false,
-          }}
-          onLoad={map => setMap(map)}
-        >
-          <MarkerF position={center} animation={2} />
-          {directionsResponse && (
-            <DirectionsRenderer directions={directionsResponse} />
+          }}>
+          {this.state.progress && (  <>
+              <Polygon path={this.state.progress} options={{ strokeColor: "#FF0000", strokeWidth:1}} 
+                   fillColor="#FF0000"
+            strokeColor="#FF0000"
+              />
+          <MarkerF position={this.state.progress[this.state.progress.length - 1]}  />  </>)}
+          {this.state.directionsResponse && (
+            <DirectionsRenderer directions={this.state.directionsResponse}  />
           )}
+         
         </GoogleMap>
-     </div>
-     <Button variant="contained" size='large' style={{margin:'0.5rem'}} onClick={handleAnimateVehical}>Get vehical route</Button>
-     <Button variant="contained" size='large' style={{margin:'0.5rem'}} onClick={handleAnimateVehical}>Animate vehical route</Button>
+     </div>  </LoadScript>
+
+     <Grid container spacing={3}  alignItems="flex-start">
+    <Grid item xs={4} >
+    <Button variant="contained" size='large' style={{margin:'0.5rem'}} onClick={this.handleVehicalRoute}>Get vehical route</Button>
+ 
+     <Button variant="contained" size='large' style={{margin:'0.5rem'}} onClick={this.handleAnimateVehical}>Animate vehical route</Button>
+  </Grid>
+  <Grid item xs={4}>
+  <span id="input-slider" gutterBottom>
+        Speed scale
+      </span>
+    <Slider
+     aria-label="Temperature"
+    defaultValue={this.state.velocity}
+    valueLabelDisplay="auto"
+      step={100}
+      marks
+       min={100}
+       max={1000}
+      onChange={this.handleOnChange}
+      />
+     </Grid>
+    </Grid>
    
-        </>
+   
+ </>
 }
+}
+
+
 
 export default Home;

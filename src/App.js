@@ -1,11 +1,8 @@
 import './App.css';
 import Login from './Components/Login'
-// import { BrowserRouter as Router, Route, Switch } from "react-router-dom";
 import {
-  BrowserRouter,
   Routes,
-  Route,
-  Link
+  Route,  
 } from "react-router-dom";
 import Home from './Components/Home';
 
